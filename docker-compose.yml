@@ -1,0 +1,112 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce_cart_app
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+      - redis
+      # - node
+    networks:
+      - ecommerce
+
+  # node:
+  #   image: node:20-alpine
+  #   container_name: ecommerce_cart_node
+  #   working_dir: /var/www/html
+  #   ports:
+  #     - "5173:5173"
+  #   volumes:
+  #     - .:/var/www/html
+  #   command: sh -c "npm install && npm run dev"
+  #   networks:
+  #     - ecommerce
+
+  # node:
+  #   image: node:20-alpine
+  #   working_dir: /var/www/html
+  #   volumes:
+  #     - .:/var/www/html
+  #   networks:
+  #     - ecommerce
+  #   command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+  webserver:
+    image: nginx:latest
+    container_name: nginx_web
+    volumes:
+      - .:/var/www/html
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - ecommerce
+      - traefik_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ecommerce_cart.rule=Host(`ecommerce_cart.test`)"
+      - "traefik.http.services.ecommerce_cart.loadbalancer.server.port=80"
+      - "traefik.docker.network=ecommerce-cart-demo_traefik_proxy"
+
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_DB: ecommerce_cart
+      POSTGRES_USER: ecommerce
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce
+
+  redis:
+    image: redis:alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    networks:
+      - ecommerce
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: mailhog_service
+    networks:
+      - traefik_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mailhog.rule=Host(`mailhog.test`)"
+      - "traefik.http.routers.mailhog.entrypoints=web"
+      - "traefik.http.services.mailhog.loadbalancer.server.port=8025"
+
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik_proxy
+    command:
+      - "--api.insecure=true" # enables dashboard at http://traefik.test
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080" # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik_proxy
+
+volumes:
+  db_data:
+
+
+networks:
+  ecommerce:
+    driver: bridge
+  traefik_proxy:
+    driver: bridge

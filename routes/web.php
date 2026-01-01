@@ -17,3 +17,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 require __DIR__.'/settings.php';
+
+Route::get('/shop/{any?}', function () {
+    return view('shop');
+})->where('any', '.*');
